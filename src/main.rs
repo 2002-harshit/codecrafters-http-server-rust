@@ -1,3 +1,4 @@
+use flate2::{write::GzEncoder, Compression};
 use http_server_starter_rust::ThreadPool;
 use std::{
     env,
@@ -96,7 +97,7 @@ fn make_response(request: HttpRequest, dirname: String) -> HttpResponse {
                 body: "".to_string(),
             }
         } else if request.path.contains("/echo/") {
-            let body = request.path.strip_prefix("/echo/").unwrap_or_default();
+            let mut body = request.path.strip_prefix("/echo/").unwrap_or_default();
             let mut headers = vec![];
 
             headers.push(Header {
@@ -119,7 +120,10 @@ fn make_response(request: HttpRequest, dirname: String) -> HttpResponse {
                     headers.push(Header {
                         key: "Content-Encoding".to_string(),
                         value: "gzip".to_string(),
-                    })
+                    });
+                    let mut encoder = GzEncoder::new(Vec::new(), Compression::default());
+                    encoder.write_all(body.as_bytes()).unwrap();
+                    body = str::from_utf8(encoder.finish().unwrap());
                 }
             }
 
