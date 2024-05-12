@@ -1,5 +1,4 @@
 use std::{
-    collections::HashMap,
     io::{BufRead, BufReader, Error, Read, Write},
     net::{Ipv4Addr, TcpListener, TcpStream},
     process::exit,
@@ -95,6 +94,31 @@ fn make_response(request: HttpRequest) -> HttpResponse {
     } else if request.path.contains("/echo/") {
         let body = request.path.strip_prefix("/echo/").unwrap_or_default();
         let mut headers = vec![];
+
+        headers.push(Header {
+            key: "Content-Length".to_string(),
+            value: body.len().to_string(),
+        });
+        headers.push(Header {
+            key: "Content-Type".to_string(),
+            value: "text/plain".to_string(),
+        });
+
+        HttpResponse {
+            version: request.version,
+            status: 200,
+            status_message: "OK".to_string(),
+            headers,
+            body: body.to_string(),
+        }
+    } else if request.path.contains("/user-agent") {
+        let mut headers = vec![];
+        let body = request
+            .headers
+            .iter()
+            .find(|header| header.key.eq_ignore_ascii_case("User-Agent"))
+            .and_then(|header| Some(header.value.as_str()))
+            .unwrap_or_default();
 
         headers.push(Header {
             key: "Content-Length".to_string(),
