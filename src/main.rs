@@ -141,7 +141,7 @@ fn make_response(request: HttpRequest, dirname: String) -> HttpResponse {
                 body: body.to_string(),
             }
         } else if request.path.contains("/files/") {
-            let file_name = request.path.strip_prefix("/files/")?;
+            let file_name = request.path.strip_prefix("/files/").unwrap();
             let file_path = format!("{}/{}", dirname, file_name);
 
             match File::open(file_path) {
@@ -185,7 +185,40 @@ fn make_response(request: HttpRequest, dirname: String) -> HttpResponse {
         }
     } else if request.method.eq_ignore_ascii_case("POST") {
         if request.path.contains("/files/") {
-            let file_name = request.path.strip_prefix("/files/")?;
+            let file_name = request.path.strip_prefix("/files/").unwrap();
+
+            let file_path = format!("{}/{}", dirname, file_name);
+
+            println!("File path: {file_path} body {0}", request.body);
+
+            File::create(file_path)
+                .unwrap()
+                .write_all(request.body.as_bytes())
+                .unwrap();
+
+            HttpResponse {
+                version: request.version,
+                status: 201,
+                status_message: "Created".to_string(),
+                headers: vec![],
+                body: "".to_string(),
+            }
+        } else {
+            HttpResponse {
+                version: request.version,
+                status: 404,
+                status_message: "Not Found".to_string(),
+                headers: vec![],
+                body: "".to_string(),
+            }
+        }
+    } else {
+        HttpResponse {
+            version: request.version,
+            status: 404,
+            status_message: "Not Found".to_string(),
+            headers: vec![],
+            body: "".to_string(),
         }
     }
 }
@@ -228,11 +261,12 @@ fn handle_connection(mut connection: TcpStream, dirname: String) -> Result<(), E
     }
     let http_request_iter = request_buffer.lines();
     let mut http_req = parse_request(http_request_iter)?;
+    // println!("{:?}", http_req);
 
     let content_length = http_req
         .headers
         .iter()
-        .find(|h| h.key.eq_ignore_ascii_case("Conetent-Length"))
+        .find(|h| h.key.eq_ignore_ascii_case("Content-Length"))
         .and_then(|h| h.value.parse::<usize>().ok())
         .unwrap_or(0);
 
@@ -243,6 +277,8 @@ fn handle_connection(mut connection: TcpStream, dirname: String) -> Result<(), E
         body = String::from_utf8(body_buf).unwrap_or_default();
     }
 
+    // println!("Length: {content_length}");
+    // println!("Body: {body}");
     http_req.body = body;
     let http_res = make_response(http_req, dirname);
     let response_string = make_response_string(http_res);
