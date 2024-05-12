@@ -1,4 +1,5 @@
 use std::{
+    collections::HashMap,
     io::{BufRead, BufReader, Error, Read, Write},
     net::{Ipv4Addr, TcpListener, TcpStream},
     process::exit,
@@ -25,6 +26,8 @@ struct HttpResponse {
     headers: Vec<Header>,
     body: String,
 }
+
+// const STATUS_MESSAGE: HashMap<i32, &str> = HashMap::from([(200, "OK"), (404, "Not Found")]);
 
 fn parse_request<'a>(mut lines: impl Iterator<Item = &'a str>) -> Result<HttpRequest, Error> {
     let request_line = lines.next().ok_or(Error::new(
@@ -81,12 +84,22 @@ fn parse_request<'a>(mut lines: impl Iterator<Item = &'a str>) -> Result<HttpReq
 }
 
 fn make_response(request: HttpRequest) -> HttpResponse {
-    HttpResponse {
-        version: request.version,
-        status: 200,
-        status_message: "OK".to_string(),
-        headers: vec![],
-        body: "".to_string(),
+    if (request.path.eq_ignore_ascii_case("/")) {
+        HttpResponse {
+            version: request.version,
+            status: 200,
+            status_message: "OK".to_string(),
+            headers: vec![],
+            body: "".to_string(),
+        }
+    } else {
+        HttpResponse {
+            version: request.version,
+            status: 404,
+            status_message: "Not Found".to_string(),
+            headers: vec![],
+            body: "".to_string(),
+        }
     }
 }
 
