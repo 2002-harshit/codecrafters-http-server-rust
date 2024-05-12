@@ -86,100 +86,106 @@ fn parse_request<'a>(mut lines: impl Iterator<Item = &'a str>) -> Result<HttpReq
 }
 
 fn make_response(request: HttpRequest, dirname: String) -> HttpResponse {
-    if request.path.eq_ignore_ascii_case("/") {
-        HttpResponse {
-            version: request.version,
-            status: 200,
-            status_message: "OK".to_string(),
-            headers: vec![],
-            body: "".to_string(),
-        }
-    } else if request.path.contains("/echo/") {
-        let body = request.path.strip_prefix("/echo/").unwrap_or_default();
-        let mut headers = vec![];
-
-        headers.push(Header {
-            key: "Content-Length".to_string(),
-            value: body.len().to_string(),
-        });
-        headers.push(Header {
-            key: "Content-Type".to_string(),
-            value: "text/plain".to_string(),
-        });
-
-        HttpResponse {
-            version: request.version,
-            status: 200,
-            status_message: "OK".to_string(),
-            headers,
-            body: body.to_string(),
-        }
-    } else if request.path.contains("/user-agent") {
-        let mut headers = vec![];
-        let body = request
-            .headers
-            .iter()
-            .find(|header| header.key.eq_ignore_ascii_case("User-Agent"))
-            .and_then(|header| Some(header.value.as_str()))
-            .unwrap_or_default();
-
-        headers.push(Header {
-            key: "Content-Length".to_string(),
-            value: body.len().to_string(),
-        });
-        headers.push(Header {
-            key: "Content-Type".to_string(),
-            value: "text/plain".to_string(),
-        });
-
-        HttpResponse {
-            version: request.version,
-            status: 200,
-            status_message: "OK".to_string(),
-            headers,
-            body: body.to_string(),
-        }
-    } else if request.path.contains("/files/") {
-        let file_name = request.path.strip_prefix("/files/").unwrap();
-        let file_path = format!("{}/{}", dirname, file_name);
-
-        match File::open(file_path) {
-            Ok(mut file) => {
-                let mut body = String::new();
-                file.read_to_string(&mut body).unwrap();
-
-                HttpResponse {
-                    version: request.version,
-                    status: 200,
-                    status_message: "OK".to_string(),
-                    headers: vec![
-                        Header {
-                            key: "Content-Type".to_string(),
-                            value: "application/octet-stream".to_string(),
-                        },
-                        Header {
-                            key: "Content-Length".to_string(),
-                            value: body.len().to_string(),
-                        },
-                    ],
-                    body,
-                }
+    if (request.method.eq_ignore_ascii_case("GET")) {
+        if request.path.eq_ignore_ascii_case("/") {
+            HttpResponse {
+                version: request.version,
+                status: 200,
+                status_message: "OK".to_string(),
+                headers: vec![],
+                body: "".to_string(),
             }
-            Err(_err) => HttpResponse {
+        } else if request.path.contains("/echo/") {
+            let body = request.path.strip_prefix("/echo/").unwrap_or_default();
+            let mut headers = vec![];
+
+            headers.push(Header {
+                key: "Content-Length".to_string(),
+                value: body.len().to_string(),
+            });
+            headers.push(Header {
+                key: "Content-Type".to_string(),
+                value: "text/plain".to_string(),
+            });
+
+            HttpResponse {
+                version: request.version,
+                status: 200,
+                status_message: "OK".to_string(),
+                headers,
+                body: body.to_string(),
+            }
+        } else if request.path.contains("/user-agent") {
+            let mut headers = vec![];
+            let body = request
+                .headers
+                .iter()
+                .find(|header| header.key.eq_ignore_ascii_case("User-Agent"))
+                .and_then(|header| Some(header.value.as_str()))
+                .unwrap_or_default();
+
+            headers.push(Header {
+                key: "Content-Length".to_string(),
+                value: body.len().to_string(),
+            });
+            headers.push(Header {
+                key: "Content-Type".to_string(),
+                value: "text/plain".to_string(),
+            });
+
+            HttpResponse {
+                version: request.version,
+                status: 200,
+                status_message: "OK".to_string(),
+                headers,
+                body: body.to_string(),
+            }
+        } else if request.path.contains("/files/") {
+            let file_name = request.path.strip_prefix("/files/")?;
+            let file_path = format!("{}/{}", dirname, file_name);
+
+            match File::open(file_path) {
+                Ok(mut file) => {
+                    let mut body = String::new();
+                    file.read_to_string(&mut body).unwrap();
+
+                    HttpResponse {
+                        version: request.version,
+                        status: 200,
+                        status_message: "OK".to_string(),
+                        headers: vec![
+                            Header {
+                                key: "Content-Type".to_string(),
+                                value: "application/octet-stream".to_string(),
+                            },
+                            Header {
+                                key: "Content-Length".to_string(),
+                                value: body.len().to_string(),
+                            },
+                        ],
+                        body,
+                    }
+                }
+                Err(_err) => HttpResponse {
+                    version: request.version,
+                    status: 404,
+                    status_message: "Not Found".to_string(),
+                    headers: vec![],
+                    body: "".to_string(),
+                },
+            }
+        } else {
+            HttpResponse {
                 version: request.version,
                 status: 404,
                 status_message: "Not Found".to_string(),
                 headers: vec![],
                 body: "".to_string(),
-            },
+            }
         }
-    } else {
-        HttpResponse {
-            version: request.version,
-            status: 404,
-            status_message: "Not Found".to_string(),
-            headers: vec![],
-            body: "".to_string(),
+    } else if request.method.eq_ignore_ascii_case("POST") {
+        if request.path.contains("/files/") {
+            let file_name = request.path.strip_prefix("/files/")?;
         }
     }
 }
