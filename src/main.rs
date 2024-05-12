@@ -84,7 +84,7 @@ fn make_response(request: HttpRequest) -> HttpResponse {
     HttpResponse {
         version: request.version,
         status: 200,
-        status_message: "Ok".to_string(),
+        status_message: "OK".to_string(),
         headers: vec![],
         body: "".to_string(),
     }
