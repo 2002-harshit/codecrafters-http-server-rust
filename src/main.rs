@@ -96,12 +96,14 @@ fn make_response(request: HttpRequest) -> HttpResponse {
         let body = request.path.strip_prefix("/echo/").unwrap_or_default();
         let mut headers = vec![];
 
-        if (!body.is_empty()) {
-            headers.push(Header {
-                key: "Content-Length".to_string(),
-                value: body.len(),
-            })
-        }
+        headers.push(Header {
+            key: "Content-Length".to_string(),
+            value: body.len().to_string(),
+        });
+        headers.push(Header {
+            key: "Content-Type".to_string(),
+            value: "text/plain".to_string(),
+        });
 
         HttpResponse {
             version: request.version,
@@ -122,10 +124,18 @@ fn make_response(request: HttpRequest) -> HttpResponse {
 }
 
 fn make_response_string(response: HttpResponse) -> String {
-    format!(
-        "{} {} {}\r\n\r\n",
+    let mut response_string = format!(
+        "{} {} {}\r\n",
         response.version, response.status, response.status_message
-    )
+    );
+
+    for header in response.headers {
+        response_string.push_str(&format!("{}: {}\r\n", header.key, header.value))
+    }
+
+    response_string.push_str(&format!("\r\n{}", response.body));
+
+    response_string
 }
 
 fn handle_connection(mut connection: TcpStream) -> Result<(), Error> {
