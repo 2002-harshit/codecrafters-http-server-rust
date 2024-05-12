@@ -1,4 +1,7 @@
+use http_server_starter_rust::ThreadPool;
 use std::{
+    env,
+    fs::File,
     io::{BufRead, BufReader, Error, Read, Write},
     net::{Ipv4Addr, TcpListener, TcpStream},
     process::exit,
@@ -82,8 +85,8 @@ fn parse_request<'a>(mut lines: impl Iterator<Item = &'a str>) -> Result<HttpReq
     })
 }
 
-fn make_response(request: HttpRequest) -> HttpResponse {
-    if (request.path.eq_ignore_ascii_case("/")) {
+fn make_response(request: HttpRequest, dirname: String) -> HttpResponse {
+    if request.path.eq_ignore_ascii_case("/") {
         HttpResponse {
             version: request.version,
             status: 200,
@@ -136,6 +139,40 @@ fn make_response(request: HttpRequest) -> HttpResponse {
             headers,
             body: body.to_string(),
         }
+    } else if request.path.contains("/files/") {
+        let file_name = request.path.strip_prefix("/files/").unwrap();
+        let file_path = format!("{}/{}", dirname, file_name);
+
+        match File::open(file_path) {
+            Ok(mut file) => {
+                let mut body = String::new();
+                file.read_to_string(&mut body).unwrap();
+
+                HttpResponse {
+                    version: request.version,
+                    status: 200,
+                    status_message: "OK".to_string(),
+                    headers: vec![
+                        Header {
+                            key: "Content-Type".to_string(),
+                            value: "application/octet-stream".to_string(),
+                        },
+                        Header {
+                            key: "Content-Length".to_string(),
+                            value: body.len().to_string(),
+                        },
+                    ],
+                    body,
+                }
+            }
+            Err(_err) => HttpResponse {
+                version: request.version,
+                status: 404,
+                status_message: "Not Found".to_string(),
+                headers: vec![],
+                body: "".to_string(),
+            },
+        }
     } else {
         HttpResponse {
             version: request.version,
@@ -162,7 +199,7 @@ fn make_response_string(response: HttpResponse) -> String {
     response_string
 }
 
-fn handle_connection(mut connection: TcpStream) -> Result<(), Error> {
+fn handle_connection(mut connection: TcpStream, dirname: String) -> Result<(), Error> {
     println!("Connected to {}", connection.peer_addr()?);
 
     let mut buf_reader = BufReader::new(&mut connection);
@@ -170,7 +207,7 @@ fn handle_connection(mut connection: TcpStream) -> Result<(), Error> {
 
     loop {
         let mut line = String::new();
-        buf_reader.read_line(&mut line);
+        buf_reader.read_line(&mut line).unwrap();
 
         if line.is_empty() {
             println!("Client closed the connection");
@@ -183,7 +220,7 @@ fn handle_connection(mut connection: TcpStream) -> Result<(), Error> {
             break;
         }
     }
-    let mut http_request_iter = request_buffer.lines();
+    let http_request_iter = request_buffer.lines();
     let mut http_req = parse_request(http_request_iter)?;
 
     let content_length = http_req
@@ -201,10 +238,9 @@ fn handle_connection(mut connection: TcpStream) -> Result<(), Error> {
     }
 
     http_req.body = body;
-    let http_res = make_response(http_req);
+    let http_res = make_response(http_req, dirname);
     let response_string = make_response_string(http_res);
-    // println!("{}", response_string);
-    let written = connection.write_all(response_string.as_bytes())?;
+    connection.write_all(response_string.as_bytes())?;
 
     println!("Connection close {}", connection.peer_addr()?);
     // drop(connection);
@@ -213,6 +249,13 @@ fn handle_connection(mut connection: TcpStream) -> Result<(), Error> {
 
 #[allow(unused)]
 fn main() {
+    let args = env::args().collect::<Vec<String>>();
+    let mut dirname = if args.len() == 3 {
+        args[2].clone()
+    } else {
+        "".to_string()
+    };
+    println!("{:?}", args);
     const PORT: u16 = 4221;
 
     let server = TcpListener::bind((Ipv4Addr::new(0, 0, 0, 0), PORT)).unwrap_or_else(|err| {
@@ -220,18 +263,26 @@ fn main() {
         exit(1);
     });
 
+    let pool = ThreadPool::build(8).unwrap_or_else(|err| {
+        eprint!("ThreadPool: {}", err);
+        exit(1);
+    });
+
     println!("Server listening at {}", server.local_addr().unwrap());
 
     for connection in server.incoming() {
+        let dirname = dirname.clone();
         match connection {
-            Ok(connection) => {
-                if let Err(err) = handle_connection(connection) {
-                    eprintln!("Some problem with handling connection")
+            Ok(connection) => pool.execute(move || {
+                if let Err(err) = handle_connection(connection, dirname) {
+                    println!("Ill formed request");
                 }
-            }
+            }),
             Err(err) => {
                 println!("Could not successfully accept {}", err.to_string())
             }
         }
     }
+
+    println!("Serve shutting down");
 }
