@@ -108,6 +108,21 @@ fn make_response(request: HttpRequest, dirname: String) -> HttpResponse {
                 value: "text/plain".to_string(),
             });
 
+            let accepted_encoding = request
+                .headers
+                .iter()
+                .find(|header| header.key.eq_ignore_ascii_case("Accept-Encoding"))
+                .and_then(|header| Some(header.value.as_str()));
+
+            if let Some(encoding) = accepted_encoding {
+                if (encoding.eq_ignore_ascii_case("gzip")) {
+                    headers.push(Header {
+                        key: "Content-Encoding".to_string(),
+                        value: "gzip".to_string(),
+                    })
+                }
+            }
+
             HttpResponse {
                 version: request.version,
                 status: 200,
@@ -261,7 +276,6 @@ fn handle_connection(mut connection: TcpStream, dirname: String) -> Result<(), E
     }
     let http_request_iter = request_buffer.lines();
     let mut http_req = parse_request(http_request_iter)?;
-    // println!("{:?}", http_req);
 
     let content_length = http_req
         .headers
@@ -277,8 +291,6 @@ fn handle_connection(mut connection: TcpStream, dirname: String) -> Result<(), E
         body = String::from_utf8(body_buf).unwrap_or_default();
     }
 
-    // println!("Length: {content_length}");
-    // println!("Body: {body}");
     http_req.body = body;
     let http_res = make_response(http_req, dirname);
     let response_string = make_response_string(http_res);
