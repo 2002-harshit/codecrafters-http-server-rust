@@ -115,7 +115,7 @@ fn make_response(request: HttpRequest, dirname: String) -> HttpResponse {
                 .and_then(|header| Some(header.value.as_str()));
 
             if let Some(encoding) = accepted_encoding {
-                if (encoding.eq_ignore_ascii_case("gzip")) {
+                if (encoding.contains("gzip")) {
                     headers.push(Header {
                         key: "Content-Encoding".to_string(),
                         value: "gzip".to_string(),
@@ -292,12 +292,12 @@ fn handle_connection(mut connection: TcpStream, dirname: String) -> Result<(), E
     }
 
     http_req.body = body;
+    println!("{:?}", http_req);
     let http_res = make_response(http_req, dirname);
     let response_string = make_response_string(http_res);
     connection.write_all(response_string.as_bytes())?;
 
     println!("Connection close {}", connection.peer_addr()?);
-    // drop(connection);
     Ok(())
 }
 
