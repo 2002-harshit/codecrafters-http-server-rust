@@ -92,6 +92,24 @@ fn make_response(request: HttpRequest) -> HttpResponse {
             headers: vec![],
             body: "".to_string(),
         }
+    } else if request.path.contains("/echo/") {
+        let body = request.path.strip_prefix("/echo/").unwrap_or_default();
+        let mut headers = vec![];
+
+        if (!body.is_empty()) {
+            headers.push(Header {
+                key: "Content-Length".to_string(),
+                value: body.len(),
+            })
+        }
+
+        HttpResponse {
+            version: request.version,
+            status: 200,
+            status_message: "OK".to_string(),
+            headers,
+            body: body.to_string(),
+        }
     } else {
         HttpResponse {
             version: request.version,
