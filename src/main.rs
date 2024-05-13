@@ -27,7 +27,7 @@ struct HttpResponse {
     status: u32,
     status_message: String,
     headers: Vec<Header>,
-    body: String,
+    body: Vec<u8>,
 }
 
 // const STATUS_MESSAGE: HashMap<i32, &str> = HashMap::from([(200, "OK"), (404, "Not Found")]);
@@ -94,20 +94,16 @@ fn make_response(request: HttpRequest, dirname: String) -> HttpResponse {
                 status: 200,
                 status_message: "OK".to_string(),
                 headers: vec![],
-                body: "".to_string(),
+                body: vec![],
             }
         } else if request.path.contains("/echo/") {
-            let mut body = request.path.strip_prefix("/echo/").unwrap_or_default();
+            let mut randomstr_bytes = request
+                .path
+                .strip_prefix("/echo/")
+                .unwrap_or_default()
+                .as_bytes()
+                .to_vec();
             let mut headers = vec![];
-
-            headers.push(Header {
-                key: "Content-Length".to_string(),
-                value: body.len().to_string(),
-            });
-            headers.push(Header {
-                key: "Content-Type".to_string(),
-                value: "text/plain".to_string(),
-            });
 
             let accepted_encoding = request
                 .headers
@@ -122,17 +118,26 @@ fn make_response(request: HttpRequest, dirname: String) -> HttpResponse {
                         value: "gzip".to_string(),
                     });
                     let mut encoder = GzEncoder::new(Vec::new(), Compression::default());
-                    encoder.write_all(body.as_bytes()).unwrap();
-                    body = str::from_utf8(encoder.finish().unwrap());
+                    encoder.write_all(&randomstr_bytes).unwrap();
+                    randomstr_bytes = encoder.finish().unwrap();
                 }
             }
+
+            headers.push(Header {
+                key: "Content-Length".to_string(),
+                value: randomstr_bytes.len().to_string(),
+            });
+            headers.push(Header {
+                key: "Content-Type".to_string(),
+                value: "text/plain".to_string(),
+            });
 
             HttpResponse {
                 version: request.version,
                 status: 200,
                 status_message: "OK".to_string(),
                 headers,
-                body: body.to_string(),
+                body: randomstr_bytes,
             }
         } else if request.path.contains("/user-agent") {
             let mut headers = vec![];
@@ -141,7 +146,9 @@ fn make_response(request: HttpRequest, dirname: String) -> HttpResponse {
                 .iter()
                 .find(|header| header.key.eq_ignore_ascii_case("User-Agent"))
                 .and_then(|header| Some(header.value.as_str()))
-                .unwrap_or_default();
+                .unwrap_or_default()
+                .as_bytes()
+                .to_vec();
 
             headers.push(Header {
                 key: "Content-Length".to_string(),
@@ -157,7 +164,7 @@ fn make_response(request: HttpRequest, dirname: String) -> HttpResponse {
                 status: 200,
                 status_message: "OK".to_string(),
                 headers,
-                body: body.to_string(),
+                body,
             }
         } else if request.path.contains("/files/") {
             let file_name = request.path.strip_prefix("/files/").unwrap();
@@ -165,8 +172,8 @@ fn make_response(request: HttpRequest, dirname: String) -> HttpResponse {
 
             match File::open(file_path) {
                 Ok(mut file) => {
-                    let mut body = String::new();
-                    file.read_to_string(&mut body).unwrap();
+                    let mut body = Vec::<u8>::new();
+                    file.read_to_end(&mut body).unwrap();
 
                     HttpResponse {
                         version: request.version,
@@ -190,7 +197,7 @@ fn make_response(request: HttpRequest, dirname: String) -> HttpResponse {
                     status: 404,
                     status_message: "Not Found".to_string(),
                     headers: vec![],
-                    body: "".to_string(),
+                    body: vec![],
                 },
             }
         } else {
@@ -199,7 +206,7 @@ fn make_response(request: HttpRequest, dirname: String) -> HttpResponse {
                 status: 404,
                 status_message: "Not Found".to_string(),
                 headers: vec![],
-                body: "".to_string(),
+                body: vec![],
             }
         }
     } else if request.method.eq_ignore_ascii_case("POST") {
@@ -220,7 +227,7 @@ fn make_response(request: HttpRequest, dirname: String) -> HttpResponse {
                 status: 201,
                 status_message: "Created".to_string(),
                 headers: vec![],
-                body: "".to_string(),
+                body: vec![],
             }
         } else {
             HttpResponse {
@@ -228,7 +235,7 @@ fn make_response(request: HttpRequest, dirname: String) -> HttpResponse {
                 status: 404,
                 status_message: "Not Found".to_string(),
                 headers: vec![],
-                body: "".to_string(),
+                body: vec![],
             }
         }
     } else {
@@ -237,12 +244,12 @@ fn make_response(request: HttpRequest, dirname: String) -> HttpResponse {
             status: 404,
             status_message: "Not Found".to_string(),
             headers: vec![],
-            body: "".to_string(),
+            body: vec![],
         }
     }
 }
 
-fn make_response_string(response: HttpResponse) -> String {
+fn make_response_string(response: HttpResponse) -> Vec<u8> {
     let mut response_string = format!(
         "{} {} {}\r\n",
         response.version, response.status, response.status_message
@@ -252,9 +259,12 @@ fn make_response_string(response: HttpResponse) -> String {
         response_string.push_str(&format!("{}: {}\r\n", header.key, header.value))
     }
 
-    response_string.push_str(&format!("\r\n{}", response.body));
+    response_string.push_str("\r\n");
+    let mut response_bytes = response_string.into_bytes();
+    response_bytes.extend(response.body);
+    // response_string.push_str(&format!("\r\n{}", response.body));
 
-    response_string
+    response_bytes
 }
 
 fn handle_connection(mut connection: TcpStream, dirname: String) -> Result<(), Error> {
@@ -298,8 +308,8 @@ fn handle_connection(mut connection: TcpStream, dirname: String) -> Result<(), E
     http_req.body = body;
     println!("{:?}", http_req);
     let http_res = make_response(http_req, dirname);
-    let response_string = make_response_string(http_res);
-    connection.write_all(response_string.as_bytes())?;
+    let response_bytes = make_response_string(http_res);
+    connection.write_all(&response_bytes)?;
 
     println!("Connection close {}", connection.peer_addr()?);
     Ok(())
